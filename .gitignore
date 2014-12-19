@@ -1,5 +1,4 @@
 build
-dist
 node_modules
 sample-data/*.mp4
 sample-data/*.mpd
