@@ -1,0 +1,29 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+  <script type="text/javascript" charset="utf-8" src="/dist/jquery.js"></script>
+  <script type="text/javascript" charset="utf-8" src="/dist/underscore-min.js"></script>
+  <script type="text/javascript" charset="utf-8" src="/dist/clappr.js"></script>
+  <script type="text/javascript" charset="utf-8" src="/dist/clappr_dash.js"></script>
+  <title>Clappr Dash Test Page</title>
+  <script type="text/javascript" charset="utf-8">
+window.onload = function() {
+  var player = new Clappr.Player({
+    sources: ['http://localhost:3000/sample-data/car-20120827-manifest.mpd'],
+
+    plugins: {
+      playback: [ClapprDash]
+    }
+
+  });
+  player.attachTo(document.getElementById('player-wrapper'));
+  window.player = player;
+}
+  </script>
+</head>
+<body>
+  <div id="player-wrapper">
+  </div>
+</body>
+</html>
