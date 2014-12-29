@@ -1,4 +1,4 @@
-var MPDParser = require('./mpd-parser')
+var ManifestLoader = require('./dash.js/ManifestLoader')
 
 class MPDSourceManager {
   constructor(playback) {
@@ -11,38 +11,44 @@ class MPDSourceManager {
     // Since many of operations depend on successfully
     // parsed mpd, this.mpd.done will help to overcome
     // race conditions.
-    this.MPDParse = new $.Deferred();
-
-    // Get the base url of the mpd file.
-    this.MPDBase = this.getMPDBase()
-
-    // Make an ajax request to the .mpd file
-    // and do more process when the ajax request
-    // is successfully complete
-    this.MPDRequest = $.ajax(this.src);
-    this.MPDRequest.done(function (data) {
-      _this.MPDParse.resolve(new MPDParser(data))
-    })
-
-    this.MPDRequest.fail(function () {
-      console.log('Error downloading MPD profile')
-    });
-
-    // Set the controls for the player
-    // based on the live or on-demand mpd profile
-    this.MPDParse.done(function(parsedMPD) {
-      playback.setControls()
-      this.parsedMPD = parsedMPD
-    }.bind(this))
-
-    // Load the initial video and audio segment
-    this.MPDParse.done(function(parsedMPD) {
-      this.current_audio_representation = this.getAudio()
-      this.current_video_representation = this.getVideo()
-      this.mse = new window.MediaSource();
-      this.mse.addEventListener('sourceopen', this.onSourceOpen.bind(this));
-      this.playback.el.src = URL.createObjectURL(this.mse)
-    }.bind(this))
+    this.manifestLoader = new ManifestLoader()
+    this.manifestLoader.load(this.src)
+    // this.manifest = new $.Deferred();
+    // this.dashParser = new DashParser()
+    //
+    // //
+    // // Get the base url of the mpd file.
+    // this.MPDBase = this.getMPDBase()
+    //
+    // // Make an ajax request to the .mpd file
+    // // and do more process when the ajax request
+    // // is successfully complete
+    // console.log(this.src);
+    // this.MPDRequest = $.ajax(this.src);
+    // this.MPDRequest.done(function (data) {
+    //   console.log(data)
+    //   _this.manifest.resolve(_this.dashParser.parse(data, "http://localhost:1935/vod/mp4:sample.mp4/"))
+    // })
+    //
+    // this.MPDRequest.fail(function () {
+    //   console.log('Error downloading MPD profile')
+    // });
+    //
+    // // Set the controls for the player
+    // // based on the live or on-demand mpd profile
+    // this.manifest.done(function(parsedMPD) {
+    //   playback.setControls()
+    //   this.parsedMPD = parsedMPD
+    // }.bind(this))
+    //
+    // // Load the initial video and audio segment
+    // this.manifest.done(function(parsedMPD) {
+    //   this.current_audio_representation = this.getAudio()
+    //   this.current_video_representation = this.getVideo()
+    //   this.mse = new window.MediaSource();
+    //   this.mse.addEventListener('sourceopen', this.onSourceOpen.bind(this));
+    //   this.playback.el.src = URL.createObjectURL(this.mse)
+    // }.bind(this))
 
   }
 

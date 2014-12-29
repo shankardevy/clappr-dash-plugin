@@ -101,7 +101,7 @@ gulp.task('serve', ['build', 'watch'], function() {
 gulp.task('watch', function() {
   var reloadServer = livereload();
 
-  var js = gulp.watch('./src/*.js');
+  var js = gulp.watch('./src/**/*.js');
   js.on('change', function(event) {
     gulp.start('build', function() {
       reloadServer.changed(event.path);

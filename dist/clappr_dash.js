@@ -5,7 +5,7 @@ module.exports = require("./src/main");
 //# sourceMappingURL=<compileOutput>
 
 
-},{"./src/main":5}],2:[function(require,module,exports){
+},{"./src/main":8}],2:[function(require,module,exports){
 (function (global){
 "use strict";
 var _ = (typeof window !== "undefined" ? window._ : typeof global !== "undefined" ? global._ : null);
@@ -2551,20 +2551,723 @@ System.get("traceur-runtime@0.0.72/src/runtime/polyfills/polyfills" + '');
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"_process":3}],5:[function(require,module,exports){
+"use strict";
+var X2JS = require('./xml2json');
+var ObjectIron = require('./objectiron');
+var DashParser = function() {
+  "use strict";
+  var SECONDS_IN_YEAR = 365 * 24 * 60 * 60,
+      SECONDS_IN_MONTH = 30 * 24 * 60 * 60,
+      SECONDS_IN_DAY = 24 * 60 * 60,
+      SECONDS_IN_HOUR = 60 * 60,
+      SECONDS_IN_MIN = 60,
+      MINUTES_IN_HOUR = 60,
+      MILLISECONDS_IN_SECONDS = 1000,
+      durationRegex = /^P(([\d.]*)Y)?(([\d.]*)M)?(([\d.]*)D)?T?(([\d.]*)H)?(([\d.]*)M)?(([\d.]*)S)?/,
+      datetimeRegex = /^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2})(?::([0-9]*)(\.[0-9]*)?)?(?:([+-])([0-9]{2})([0-9]{2}))?/,
+      numericRegex = /^[-+]?[0-9]+[.]?[0-9]*([eE][-+]?[0-9]+)?$/,
+      matchers = [{
+        type: "duration",
+        test: function(str) {
+          return durationRegex.test(str);
+        },
+        converter: function(str) {
+          var match = durationRegex.exec(str);
+          return (parseFloat(match[2] || 0) * SECONDS_IN_YEAR + parseFloat(match[4] || 0) * SECONDS_IN_MONTH + parseFloat(match[6] || 0) * SECONDS_IN_DAY + parseFloat(match[8] || 0) * SECONDS_IN_HOUR + parseFloat(match[10] || 0) * SECONDS_IN_MIN + parseFloat(match[12] || 0));
+        }
+      }, {
+        type: "datetime",
+        test: function(str) {
+          return datetimeRegex.test(str);
+        },
+        converter: function(str) {
+          var match = datetimeRegex.exec(str),
+              utcDate;
+          utcDate = Date.UTC(parseInt(match[1], 10), parseInt(match[2], 10) - 1, parseInt(match[3], 10), parseInt(match[4], 10), parseInt(match[5], 10), (match[6] && parseInt(match[6], 10) || 0), (match[7] && parseFloat(match[7]) * MILLISECONDS_IN_SECONDS) || 0);
+          if (match[9] && match[10]) {
+            var timezoneOffset = parseInt(match[9], 10) * MINUTES_IN_HOUR + parseInt(match[10], 10);
+            utcDate += (match[8] === '+' ? -1 : +1) * timezoneOffset * SECONDS_IN_MIN * MILLISECONDS_IN_SECONDS;
+          }
+          return new Date(utcDate);
+        }
+      }, {
+        type: "numeric",
+        test: function(str) {
+          return numericRegex.test(str);
+        },
+        converter: function(str) {
+          return parseFloat(str);
+        }
+      }],
+      getCommonValuesMap = function() {
+        var adaptationSet,
+            representation,
+            subRepresentation,
+            common;
+        common = [{
+          name: 'profiles',
+          merge: false
+        }, {
+          name: 'width',
+          merge: false
+        }, {
+          name: 'height',
+          merge: false
+        }, {
+          name: 'sar',
+          merge: false
+        }, {
+          name: 'frameRate',
+          merge: false
+        }, {
+          name: 'audioSamplingRate',
+          merge: false
+        }, {
+          name: 'mimeType',
+          merge: false
+        }, {
+          name: 'segmentProfiles',
+          merge: false
+        }, {
+          name: 'codecs',
+          merge: false
+        }, {
+          name: 'maximumSAPPeriod',
+          merge: false
+        }, {
+          name: 'startsWithSap',
+          merge: false
+        }, {
+          name: 'maxPlayoutRate',
+          merge: false
+        }, {
+          name: 'codingDependency',
+          merge: false
+        }, {
+          name: 'scanType',
+          merge: false
+        }, {
+          name: 'FramePacking',
+          merge: true
+        }, {
+          name: 'AudioChannelConfiguration',
+          merge: true
+        }, {
+          name: 'ContentProtection',
+          merge: true
+        }];
+        adaptationSet = {};
+        adaptationSet.name = "AdaptationSet";
+        adaptationSet.isRoot = false;
+        adaptationSet.isArray = true;
+        adaptationSet.parent = null;
+        adaptationSet.children = [];
+        adaptationSet.properties = common;
+        representation = {};
+        representation.name = "Representation";
+        representation.isRoot = false;
+        representation.isArray = true;
+        representation.parent = adaptationSet;
+        representation.children = [];
+        representation.properties = common;
+        adaptationSet.children.push(representation);
+        subRepresentation = {};
+        subRepresentation.name = "SubRepresentation";
+        subRepresentation.isRoot = false;
+        subRepresentation.isArray = true;
+        subRepresentation.parent = representation;
+        subRepresentation.children = [];
+        subRepresentation.properties = common;
+        representation.children.push(subRepresentation);
+        return adaptationSet;
+      },
+      getSegmentValuesMap = function() {
+        var period,
+            adaptationSet,
+            representation,
+            common;
+        common = [{
+          name: 'SegmentBase',
+          merge: true
+        }, {
+          name: 'SegmentTemplate',
+          merge: true
+        }, {
+          name: 'SegmentList',
+          merge: true
+        }];
+        period = {};
+        period.name = "Period";
+        period.isRoot = false;
+        period.isArray = true;
+        period.parent = null;
+        period.children = [];
+        period.properties = common;
+        adaptationSet = {};
+        adaptationSet.name = "AdaptationSet";
+        adaptationSet.isRoot = false;
+        adaptationSet.isArray = true;
+        adaptationSet.parent = period;
+        adaptationSet.children = [];
+        adaptationSet.properties = common;
+        period.children.push(adaptationSet);
+        representation = {};
+        representation.name = "Representation";
+        representation.isRoot = false;
+        representation.isArray = true;
+        representation.parent = adaptationSet;
+        representation.children = [];
+        representation.properties = common;
+        adaptationSet.children.push(representation);
+        return period;
+      },
+      getBaseUrlValuesMap = function() {
+        var mpd,
+            period,
+            adaptationSet,
+            representation,
+            common;
+        common = [{
+          name: 'BaseURL',
+          merge: true,
+          mergeFunction: function(parentValue, childValue) {
+            var mergedValue;
+            if (childValue.indexOf("http://") === 0) {
+              mergedValue = childValue;
+            } else {
+              mergedValue = parentValue + childValue;
+            }
+            return mergedValue;
+          }
+        }];
+        mpd = {};
+        mpd.name = "mpd";
+        mpd.isRoot = true;
+        mpd.isArray = true;
+        mpd.parent = null;
+        mpd.children = [];
+        mpd.properties = common;
+        period = {};
+        period.name = "Period";
+        period.isRoot = false;
+        period.isArray = true;
+        period.parent = null;
+        period.children = [];
+        period.properties = common;
+        mpd.children.push(period);
+        adaptationSet = {};
+        adaptationSet.name = "AdaptationSet";
+        adaptationSet.isRoot = false;
+        adaptationSet.isArray = true;
+        adaptationSet.parent = period;
+        adaptationSet.children = [];
+        adaptationSet.properties = common;
+        period.children.push(adaptationSet);
+        representation = {};
+        representation.name = "Representation";
+        representation.isRoot = false;
+        representation.isArray = true;
+        representation.parent = adaptationSet;
+        representation.children = [];
+        representation.properties = common;
+        adaptationSet.children.push(representation);
+        return mpd;
+      },
+      getDashMap = function() {
+        var result = [];
+        result.push(getCommonValuesMap());
+        result.push(getSegmentValuesMap());
+        result.push(getBaseUrlValuesMap());
+        return result;
+      },
+      internalParse = function(data, baseUrl) {
+        var manifest,
+            converter = new X2JS(matchers, '', true),
+            iron = new ObjectIron(getDashMap()),
+            start = new Date(),
+            json = null,
+            ironed = null;
+        try {
+          manifest = converter.xml_str2json(data);
+          json = new Date();
+          if (!manifest.hasOwnProperty("BaseURL")) {
+            manifest.BaseURL = baseUrl;
+          } else {
+            manifest.BaseURL = manifest.BaseURL_asArray[0];
+            if (manifest.BaseURL.toString().indexOf("http") !== 0) {
+              manifest.BaseURL = baseUrl + manifest.BaseURL;
+            }
+          }
+          iron.run(manifest);
+          ironed = new Date();
+        } catch (err) {
+          console.log(data);
+          console.log(err);
+          return null;
+        }
+        return manifest;
+      };
+  return {
+    debug: undefined,
+    errHandler: undefined,
+    parse: internalParse
+  };
+};
+DashParser.prototype = {constructor: DashParser};
+module.exports = DashParser;
+
+//# sourceMappingURL=<compileOutput>
+
+
+},{"./objectiron":6,"./xml2json":7}],6:[function(require,module,exports){
+"use strict";
+function ObjectIron(map) {
+  var lookup;
+  lookup = [];
+  for (var i = 0,
+      len = map.length; i < len; i += 1) {
+    if (map[i].isRoot) {
+      lookup.push("root");
+    } else {
+      lookup.push(map[i].name);
+    }
+  }
+  var mergeValues = function(parentItem, childItem) {
+    var name,
+        parentValue,
+        childValue;
+    if (parentItem === null || childItem === null) {
+      return;
+    }
+    for (name in parentItem) {
+      if (parentItem.hasOwnProperty(name)) {
+        if (!childItem.hasOwnProperty(name)) {
+          childItem[name] = parentItem[name];
+        }
+      }
+    }
+  },
+      mapProperties = function(properties, parent, child) {
+        var i,
+            len,
+            property,
+            parentValue,
+            childValue;
+        if (properties === null || properties.length === 0) {
+          return;
+        }
+        for (i = 0, len = properties.length; i < len; i += 1) {
+          property = properties[i];
+          if (parent.hasOwnProperty(property.name)) {
+            if (child.hasOwnProperty(property.name)) {
+              if (property.merge) {
+                parentValue = parent[property.name];
+                childValue = child[property.name];
+                if (typeof parentValue === 'object' && typeof childValue === 'object') {
+                  mergeValues(parentValue, childValue);
+                } else {
+                  if (property.mergeFunction != null) {
+                    child[property.name] = property.mergeFunction(parentValue, childValue);
+                  } else {
+                    child[property.name] = parentValue + childValue;
+                  }
+                }
+              }
+            } else {
+              child[property.name] = parent[property.name];
+            }
+          }
+        }
+      },
+      mapItem = function(obj, node) {
+        var item = obj,
+            i,
+            len,
+            v,
+            len2,
+            array,
+            childItem,
+            childNode,
+            property;
+        if (item.children === null || item.children.length === 0) {
+          return;
+        }
+        for (i = 0, len = item.children.length; i < len; i += 1) {
+          childItem = item.children[i];
+          if (node.hasOwnProperty(childItem.name)) {
+            if (childItem.isArray) {
+              array = node[childItem.name + "_asArray"];
+              for (v = 0, len2 = array.length; v < len2; v += 1) {
+                childNode = array[v];
+                mapProperties(item.properties, node, childNode);
+                mapItem(childItem, childNode);
+              }
+            } else {
+              childNode = node[childItem.name];
+              mapProperties(item.properties, node, childNode);
+              mapItem(childItem, childNode);
+            }
+          }
+        }
+      },
+      performMapping = function(source) {
+        var i,
+            len,
+            pi,
+            pp,
+            item,
+            node,
+            array;
+        if (source === null) {
+          return source;
+        }
+        if (typeof source !== 'object') {
+          return source;
+        }
+        for (i = 0, len = lookup.length; i < len; i += 1) {
+          if (lookup[i] === "root") {
+            item = map[i];
+            node = source;
+            mapItem(item, node);
+          }
+        }
+        for (pp in source) {
+          if (source.hasOwnProperty(pp)) {
+            pi = lookup.indexOf(pp);
+            if (pi !== -1) {
+              item = map[pi];
+              if (item.isArray) {
+                array = source[pp + "_asArray"];
+                for (i = 0, len = array.length; i < len; i += 1) {
+                  node = array[i];
+                  mapItem(item, node);
+                }
+              } else {
+                node = source[pp];
+                mapItem(item, node);
+              }
+            }
+            performMapping(source[pp]);
+          }
+        }
+        return source;
+      };
+  return {run: performMapping};
+}
+module.exports = ObjectIron;
+
+//# sourceMappingURL=<compileOutput>
+
+
+},{}],7:[function(require,module,exports){
+"use strict";
+function X2JS(matchers, attrPrefix, ignoreRoot) {
+  if (attrPrefix === null || attrPrefix === undefined) {
+    attrPrefix = "_";
+  }
+  if (ignoreRoot === null || ignoreRoot === undefined) {
+    ignoreRoot = false;
+  }
+  var VERSION = "1.0.11";
+  var escapeMode = false;
+  var DOMNodeTypes = {
+    ELEMENT_NODE: 1,
+    TEXT_NODE: 3,
+    CDATA_SECTION_NODE: 4,
+    COMMENT_NODE: 8,
+    DOCUMENT_NODE: 9
+  };
+  function getNodeLocalName(node) {
+    var nodeLocalName = node.localName;
+    if (nodeLocalName == null)
+      nodeLocalName = node.baseName;
+    if (nodeLocalName == null || nodeLocalName == "")
+      nodeLocalName = node.nodeName;
+    return nodeLocalName;
+  }
+  function getNodePrefix(node) {
+    return node.prefix;
+  }
+  function escapeXmlChars(str) {
+    if (typeof(str) == "string")
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;').replace(/\//g, '&#x2F;');
+    else
+      return str;
+  }
+  function unescapeXmlChars(str) {
+    return str.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&#x2F;/g, '\/');
+  }
+  function parseDOMChildren(node) {
+    if (node.nodeType == DOMNodeTypes.DOCUMENT_NODE) {
+      var result,
+          child = node.firstChild,
+          i,
+          len;
+      for (i = 0, len = node.childNodes.length; i < len; i += 1) {
+        if (node.childNodes[i].nodeType !== DOMNodeTypes.COMMENT_NODE) {
+          child = node.childNodes[i];
+          break;
+        }
+      }
+      if (ignoreRoot) {
+        result = parseDOMChildren(child);
+      } else {
+        result = {};
+        var childName = getNodeLocalName(child);
+        result[childName] = parseDOMChildren(child);
+      }
+      return result;
+    } else if (node.nodeType == DOMNodeTypes.ELEMENT_NODE) {
+      var result = new Object;
+      result.__cnt = 0;
+      var nodeChildren = node.childNodes;
+      for (var cidx = 0; cidx < nodeChildren.length; cidx++) {
+        var child = nodeChildren.item(cidx);
+        var childName = getNodeLocalName(child);
+        result.__cnt++;
+        if (result[childName] == null) {
+          result[childName] = parseDOMChildren(child);
+          result[childName + "_asArray"] = new Array(1);
+          result[childName + "_asArray"][0] = result[childName];
+        } else {
+          if (result[childName] != null) {
+            if (!(result[childName] instanceof Array)) {
+              var tmpObj = result[childName];
+              result[childName] = new Array();
+              result[childName][0] = tmpObj;
+              result[childName + "_asArray"] = result[childName];
+            }
+          }
+          var aridx = 0;
+          while (result[childName][aridx] != null)
+            aridx++;
+          (result[childName])[aridx] = parseDOMChildren(child);
+        }
+      }
+      for (var aidx = 0; aidx < node.attributes.length; aidx++) {
+        var attr = node.attributes.item(aidx);
+        result.__cnt++;
+        var value2 = attr.value;
+        for (var m = 0,
+            ml = matchers.length; m < ml; m++) {
+          var matchobj = matchers[m];
+          if (matchobj.test.call(this, attr.value))
+            value2 = matchobj.converter.call(this, attr.value);
+        }
+        result[attrPrefix + attr.name] = value2;
+      }
+      var nodePrefix = getNodePrefix(node);
+      if (nodePrefix != null && nodePrefix != "") {
+        result.__cnt++;
+        result.__prefix = nodePrefix;
+      }
+      if (result.__cnt == 1 && result["#text"] != null) {
+        result = result["#text"];
+      }
+      if (result["#text"] != null) {
+        result.__text = result["#text"];
+        if (escapeMode)
+          result.__text = unescapeXmlChars(result.__text);
+        delete result["#text"];
+        delete result["#text_asArray"];
+      }
+      if (result["#cdata-section"] != null) {
+        result.__cdata = result["#cdata-section"];
+        delete result["#cdata-section"];
+        delete result["#cdata-section_asArray"];
+      }
+      if (result.__text != null || result.__cdata != null) {
+        result.toString = function() {
+          return (this.__text != null ? this.__text : '') + (this.__cdata != null ? this.__cdata : '');
+        };
+      }
+      return result;
+    } else if (node.nodeType == DOMNodeTypes.TEXT_NODE || node.nodeType == DOMNodeTypes.CDATA_SECTION_NODE) {
+      return node.nodeValue;
+    } else if (node.nodeType == DOMNodeTypes.COMMENT_NODE) {
+      return null;
+    }
+  }
+  function startTag(jsonObj, element, attrList, closed) {
+    var resultStr = "<" + ((jsonObj != null && jsonObj.__prefix != null) ? (jsonObj.__prefix + ":") : "") + element;
+    if (attrList != null) {
+      for (var aidx = 0; aidx < attrList.length; aidx++) {
+        var attrName = attrList[aidx];
+        var attrVal = jsonObj[attrName];
+        resultStr += " " + attrName.substr(1) + "='" + attrVal + "'";
+      }
+    }
+    if (!closed)
+      resultStr += ">";
+    else
+      resultStr += "/>";
+    return resultStr;
+  }
+  function endTag(jsonObj, elementName) {
+    return "</" + (jsonObj.__prefix != null ? (jsonObj.__prefix + ":") : "") + elementName + ">";
+  }
+  function endsWith(str, suffix) {
+    return str.indexOf(suffix, str.length - suffix.length) !== -1;
+  }
+  function jsonXmlSpecialElem(jsonObj, jsonObjField) {
+    if (endsWith(jsonObjField.toString(), ("_asArray")) || jsonObjField.toString().indexOf("_") == 0 || (jsonObj[jsonObjField] instanceof Function))
+      return true;
+    else
+      return false;
+  }
+  function jsonXmlElemCount(jsonObj) {
+    var elementsCnt = 0;
+    if (jsonObj instanceof Object) {
+      for (var it in jsonObj) {
+        if (jsonXmlSpecialElem(jsonObj, it))
+          continue;
+        elementsCnt++;
+      }
+    }
+    return elementsCnt;
+  }
+  function parseJSONAttributes(jsonObj) {
+    var attrList = [];
+    if (jsonObj instanceof Object) {
+      for (var ait in jsonObj) {
+        if (ait.toString().indexOf("__") == -1 && ait.toString().indexOf("_") == 0) {
+          attrList.push(ait);
+        }
+      }
+    }
+    return attrList;
+  }
+  function parseJSONTextAttrs(jsonTxtObj) {
+    var result = "";
+    if (jsonTxtObj.__cdata != null) {
+      result += "<![CDATA[" + jsonTxtObj.__cdata + "]]>";
+    }
+    if (jsonTxtObj.__text != null) {
+      if (escapeMode)
+        result += escapeXmlChars(jsonTxtObj.__text);
+      else
+        result += jsonTxtObj.__text;
+    }
+    return result;
+  }
+  function parseJSONTextObject(jsonTxtObj) {
+    var result = "";
+    if (jsonTxtObj instanceof Object) {
+      result += parseJSONTextAttrs(jsonTxtObj);
+    } else if (jsonTxtObj != null) {
+      if (escapeMode)
+        result += escapeXmlChars(jsonTxtObj);
+      else
+        result += jsonTxtObj;
+    }
+    return result;
+  }
+  function parseJSONArray(jsonArrRoot, jsonArrObj, attrList) {
+    var result = "";
+    if (jsonArrRoot.length == 0) {
+      result += startTag(jsonArrRoot, jsonArrObj, attrList, true);
+    } else {
+      for (var arIdx = 0; arIdx < jsonArrRoot.length; arIdx++) {
+        result += startTag(jsonArrRoot[arIdx], jsonArrObj, parseJSONAttributes(jsonArrRoot[arIdx]), false);
+        result += parseJSONObject(jsonArrRoot[arIdx]);
+        result += endTag(jsonArrRoot[arIdx], jsonArrObj);
+      }
+    }
+    return result;
+  }
+  function parseJSONObject(jsonObj) {
+    var result = "";
+    var elementsCnt = jsonXmlElemCount(jsonObj);
+    if (elementsCnt > 0) {
+      for (var it in jsonObj) {
+        if (jsonXmlSpecialElem(jsonObj, it))
+          continue;
+        var subObj = jsonObj[it];
+        var attrList = parseJSONAttributes(subObj);
+        if (subObj == null || subObj == undefined) {
+          result += startTag(subObj, it, attrList, true);
+        } else if (subObj instanceof Object) {
+          if (subObj instanceof Array) {
+            result += parseJSONArray(subObj, it, attrList);
+          } else {
+            var subObjElementsCnt = jsonXmlElemCount(subObj);
+            if (subObjElementsCnt > 0 || subObj.__text != null || subObj.__cdata != null) {
+              result += startTag(subObj, it, attrList, false);
+              result += parseJSONObject(subObj);
+              result += endTag(subObj, it);
+            } else {
+              result += startTag(subObj, it, attrList, true);
+            }
+          }
+        } else {
+          result += startTag(subObj, it, attrList, false);
+          result += parseJSONTextObject(subObj);
+          result += endTag(subObj, it);
+        }
+      }
+    }
+    result += parseJSONTextObject(jsonObj);
+    return result;
+  }
+  this.parseXmlString = function(xmlDocStr) {
+    var xmlDoc;
+    if (window.DOMParser) {
+      var parser = new window.DOMParser();
+      xmlDoc = parser.parseFromString(xmlDocStr, "text/xml");
+    } else {
+      if (xmlDocStr.indexOf("<?") == 0) {
+        xmlDocStr = xmlDocStr.substr(xmlDocStr.indexOf("?>") + 2);
+      }
+      xmlDoc = new ActiveXObject("Microsoft.XMLDOM");
+      xmlDoc.async = "false";
+      xmlDoc.loadXML(xmlDocStr);
+    }
+    return xmlDoc;
+  };
+  this.xml2json = function(xmlDoc) {
+    return parseDOMChildren(xmlDoc);
+  };
+  this.xml_str2json = function(xmlDocStr) {
+    var xmlDoc = this.parseXmlString(xmlDocStr);
+    return this.xml2json(xmlDoc);
+  };
+  this.json2xml_str = function(jsonObj) {
+    return parseJSONObject(jsonObj);
+  };
+  this.json2xml = function(jsonObj) {
+    var xmlDocStr = this.json2xml_str(jsonObj);
+    return this.parseXmlString(xmlDocStr);
+  };
+  this.getVersion = function() {
+    return VERSION;
+  };
+  this.escapeMode = function(enabled) {
+    escapeMode = enabled;
+  };
+}
+module.exports = X2JS;
+
+//# sourceMappingURL=<compileOutput>
+
+
+},{}],8:[function(require,module,exports){
 (function (process,global){
 "use strict";
 var Playback = require('playback');
 var JST = require('../jst');
-var MPDSourceManager = require('./mpd_source_manager');
+var DashParser = require('./dash.js/DashParser');
 var _ = (typeof window !== "undefined" ? window._ : typeof global !== "undefined" ? global._ : null);
 var ClapprDash = function ClapprDash(options) {
   $traceurRuntime.superCall(this, $ClapprDash.prototype, "constructor", [options]);
   var _this = this;
   this.options = options;
   this.el.loop = options.loop;
-  this.firstBuffer = true;
-  this.MPDSourceManager = new MPDSourceManager(this);
   this.settings = {default: ['seekbar']};
+  this.settings.left = ["playpause", "position", "duration"];
+  this.settings.right = ["fullscreen", "volume"];
+  this.settings.seekEnabled = true;
+  this.parser = new DashParser;
+  this.retrieveDASHManifest.bind(this)(options.src);
 };
 var $ClapprDash = ClapprDash;
 ($traceurRuntime.createClass)(ClapprDash, {
@@ -2580,39 +3283,158 @@ var $ClapprDash = ClapprDash;
   get attributes() {
     return {'data-html5-video': ''};
   },
-  get events() {
-    return {
-      'timeupdate': 'timeUpdated',
-      'progress': 'progress',
-      'ended': 'ended',
-      'stalled': 'stalled',
-      'waiting': 'waiting',
-      'canplaythrough': 'bufferFull',
-      'loadedmetadata': 'loadedMetadata'
-    };
+  retrieveDASHManifest: function(url) {
+    var xhr = new XMLHttpRequest();
+    xhr.addEventListener('load', this.onManifestLoad.bind(this, url));
+    xhr.open("GET", url);
+    xhr.send();
   },
-  setControls: function() {
-    if (this.live) {
-      this.el.preload = this.options.preload ? this.options.preload : 'none';
-      this.settings.left = ["playstop"];
-      this.settings.right = ["fullscreen", "volume"];
-    } else {
-      this.el.preload = this.options.preload ? this.options.preload : 'metadata';
-      this.settings.left = ["playpause", "position", "duration"];
-      this.settings.right = ["fullscreen", "volume"];
-      this.settings.seekEnabled = true;
+  parseBaseUrl: function(url) {
+    var base = null;
+    if (url.indexOf("/") !== -1) {
+      if (url.indexOf("?") !== -1) {
+        url = url.substring(0, url.indexOf("?"));
+      }
+      base = url.substring(0, url.lastIndexOf("/") + 1);
+    }
+    return base;
+  },
+  onManifestLoad: function(url, evt) {
+    var mpd,
+        msrc;
+    mpd = this.parser.parse(evt.target.responseText, this.parseBaseUrl(url));
+    msrc = new MediaSource();
+    msrc.mpd = mpd;
+    msrc.addEventListener('sourceopen', this.onSourceOpen.bind(this));
+    this.mpd = mpd;
+    this.msrc = msrc;
+    this.el.src = URL.createObjectURL(msrc);
+  },
+  onSourceOpen: function(evt) {
+    var video = this.el;
+    var msrc = this.msrc;
+    var mpd = msrc.mpd;
+    if (!msrc.progressTimer) {
+      msrc.progressTimer = window.setInterval(this.onProgress.bind(this, msrc), 500);
+    }
+    msrc.duration = mpd.Period.duration || mpd.mediaPresentationDuration;
+    for (var i = 0; i < mpd.Period.AdaptationSet_asArray.length; i++) {
+      window.mpd = mpd;
+      var aset = mpd.Period.AdaptationSet[i];
+      var reps = aset.Representation_asArray.map(this.normalizeRepresentation.bind(this, mpd));
+      var mime = reps[0].mimeType || aset.mimeType;
+      var codecs = reps[0].codecs || aset.codecs;
+      var buf = msrc.addSourceBuffer(mime + '; codecs="' + codecs + '"');
+      buf.aset = aset;
+      buf.rep = reps[0];
+      buf.active = true;
+      buf.mime = mime;
+      buf.queue = [];
+      buf.SegIdx = 0;
+      buf.nextSegDuration = 0;
+      if (buf.appendBuffer) {
+        buf.addEventListener('updateend', function(e) {
+          if (buf.queue.length) {
+            buf.appendBuffer(buf.queue.shift());
+          }
+        });
+      }
     }
   },
-  loadedMetadata: function(e) {
-    this.trigger('playback:loadedmetadata', e.target.duration);
-    this.trigger('playback:settingsupdate');
-    this.checkInitialSeek();
+  replaceRepresentationToken: function(url, rep) {
+    return url.replace('$RepresentationID$', rep.id);
   },
-  getPlaybackType: function() {
-    return this.isHLS && _.contains([0, undefined, Infinity], this.el.duration) ? 'live' : 'vod';
+  normalizeRepresentation: function(mpd, repSrc) {
+    repSrc.duration = mpd.mediaPresentationDuration;
+    repSrc.init = this.replaceRepresentationToken(repSrc.SegmentTemplate.initialization, repSrc);
+    repSrc.segmentURLTemplate = this.replaceRepresentationToken(repSrc.SegmentTemplate.media, repSrc);
+    repSrc.segments = repSrc.SegmentTemplate.SegmentTimeline.S;
+    window.testing = repSrc;
+    return repSrc;
   },
-  isHighDefinitionInUse: function() {
-    return false;
+  onProgress: function(msrc) {
+    if (msrc.readyState != 'open' && !!msrc.progressTimer) {
+      window.clearInterval(msrc.progressTimer);
+      msrc.progressTimer = null;
+      return;
+    }
+    var active = false;
+    for (var i = 0; i < msrc.sourceBuffers.length; i++) {
+      var buf = msrc.sourceBuffers[i];
+      if (!buf.active)
+        continue;
+      active = true;
+      this.fetchNextSegment(buf, this, msrc);
+    }
+    if (!active && msrc.readyState == 'open') {
+      msrc.endOfStream();
+      return;
+    }
+  },
+  fetchNextSegment: function(buf, video, msrc) {
+    if (buf.xhr)
+      return;
+    var rep = buf.rep;
+    var url;
+    if (!buf.init_loaded) {
+      url = rep.BaseURL + rep.init;
+      this.makeXHR(buf, url, true);
+      return;
+    }
+    url = rep.BaseURL + this.replaceTimeToken(rep.segmentURLTemplate, buf);
+    this.makeXHR(buf, url);
+  },
+  makeXHR: function(buf, url, is_init) {
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", url);
+    xhr.responseType = 'arraybuffer';
+    xhr.addEventListener('load', this.onXHRLoad.bind(this));
+    xhr.buf = buf;
+    xhr.is_init = is_init;
+    buf.xhr = xhr;
+    xhr.send();
+    return xhr;
+  },
+  onXHRLoad: function(evt) {
+    var xhr = evt.target;
+    var buf = xhr.buf;
+    buf.xhr = null;
+    var vid = buf.video;
+    if (xhr.readyState != xhr.DONE)
+      return;
+    if (xhr.status >= 300) {
+      throw 'TODO: retry XHRs on failure';
+    }
+    this.queueAppend(buf, xhr.response);
+    if (xhr.is_init) {
+      buf.init_loaded = true;
+    } else {
+      window.bufTest = buf;
+      buf.nextSegDuration = (function() {
+        var duration = 0;
+        for (var i = 0; i <= buf.SegIdx; i++) {
+          duration += buf.rep.segments[i].d;
+        }
+        return duration;
+      }());
+      buf.SegIdx++;
+    }
+    if (buf.SegIdx >= buf.rep.segments.length) {
+      buf.active = false;
+    }
+  },
+  queueAppend: function(buf, val) {
+    if (buf.updating) {
+      buf.queue.push(val);
+    } else if (buf.appendBuffer) {
+      buf.appendBuffer(val);
+    } else {
+      buf.append(new Uint8Array(val));
+    }
+  },
+  replaceTimeToken: function(template, buf) {
+    var url = template.replace('$Time$', buf.nextSegDuration);
+    return url;
   },
   play: function() {
     this.el.play();
@@ -2688,7 +3510,7 @@ var $ClapprDash = ClapprDash;
     return this.el.currentTime;
   },
   getDuration: function() {
-    return 10;
+    this.el.duration;
   },
   timeUpdated: function() {
     if (this.getPlaybackType() !== 'live') {
@@ -2730,156 +3552,4 @@ module.exports = window.ClapprDash = ClapprDash;
 
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../jst":2,"./mpd_source_manager":7,"_process":3,"playback":"playback"}],6:[function(require,module,exports){
-"use strict";
-var MPDParser = function MPDParser(xml) {
-  this.$MPDDoc = $($.parseXML(xml));
-  this.data = {};
-  this.parseMPDDoc();
-};
-($traceurRuntime.createClass)(MPDParser, {
-  parsedData: function() {
-    return this.data;
-  },
-  parseMPDDoc: function() {
-    this.parsePeriodData();
-  },
-  parsePeriodData: function() {
-    var _this = this;
-    _this.data['Period'] = [];
-    this.$MPDDoc.find('Period').each(function(i, v) {
-      _this.data['Period'][i] = {
-        period: $(this).attr('duration'),
-        start: $(this).attr('start'),
-        adaptations: _this.parseAdaptation(v)
-      };
-    });
-  },
-  parseAdaptation: function(xml) {
-    var _this = this;
-    var result = {};
-    var type = '';
-    $(xml).find('AdaptationSet').each(function(i, v) {
-      type = $(this).find('ContentComponent').attr('contentType');
-      result[type] = {representations: _this.parseRepresentations(v)};
-    });
-    return result;
-  },
-  parseRepresentations: function(xml) {
-    var _this = this;
-    var result = [];
-    $(xml).find('Representation').each(function(i, v) {
-      result[i] = {
-        bandwidth: $(this).attr('bandwidth'),
-        codecs: $(this).attr('codecs'),
-        height: $(this).attr('height'),
-        width: $(this).attr('width'),
-        mimeType: $(this).attr('mimeType'),
-        id: $(this).attr('id'),
-        numChannels: $(this).attr('numChannels'),
-        sampleRate: $(this).attr('sampleRate'),
-        baseURL: $(this).find('BaseURL').text(),
-        segmentBaseIndexRange: $(this).find('SegmentBase').attr('indexRange'),
-        segmentBaseInitRange: $(this).find('Initialization').attr('range')
-      };
-    });
-    return result;
-  }
-}, {});
-module.exports = MPDParser;
-
-//# sourceMappingURL=<compileOutput>
-
-
-},{}],7:[function(require,module,exports){
-"use strict";
-var MPDParser = require('./mpd-parser');
-var MPDSourceManager = function MPDSourceManager(playback) {
-  var _this = this;
-  this.playback = playback;
-  this.src = playback.options.src;
-  this.MPDParse = new $.Deferred();
-  this.MPDBase = this.getMPDBase();
-  this.MPDRequest = $.ajax(this.src);
-  this.MPDRequest.done(function(data) {
-    _this.MPDParse.resolve(new MPDParser(data));
-  });
-  this.MPDRequest.fail(function() {
-    console.log('Error downloading MPD profile');
-  });
-  this.MPDParse.done(function(parsedMPD) {
-    playback.setControls();
-    this.parsedMPD = parsedMPD;
-  }.bind(this));
-  this.MPDParse.done(function(parsedMPD) {
-    this.current_audio_representation = this.getAudio();
-    this.current_video_representation = this.getVideo();
-    this.mse = new window.MediaSource();
-    this.mse.addEventListener('sourceopen', this.onSourceOpen.bind(this));
-    this.playback.el.src = URL.createObjectURL(this.mse);
-  }.bind(this));
-};
-($traceurRuntime.createClass)(MPDSourceManager, {
-  availableVideos: function() {
-    return this.parsedMPD.data['Period'][0]['adaptations']['video']['representations'];
-  },
-  availableAudios: function() {
-    return this.parsedMPD.data['Period'][0]['adaptations']['audio']['representations'];
-  },
-  getVideo: function() {
-    var representation = _.sample(this.availableVideos());
-    return {
-      url: this.MPDBase + representation.baseURL,
-      codecs: representation.codecs,
-      mimeType: representation.mimeType
-    };
-  },
-  getAudio: function() {
-    var representation = _.sample(this.availableAudios());
-    return {
-      url: this.MPDBase + representation.baseURL,
-      codecs: representation.codecs,
-      mimeType: representation.mimeType
-    };
-  },
-  downloadArrayBuffer: function(url, context, callback) {
-    var xhr = new XMLHttpRequest();
-    xhr.open("GET", url);
-    xhr.responseType = "arraybuffer";
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState === 4) {
-        if (xhr.status === 200) {
-          var binary = new Uint8Array(xhr.response);
-          callback(binary, context);
-        }
-      }
-    };
-    xhr.send();
-    return xhr;
-  },
-  getMPDBase: function() {
-    var result = this.src.split('/');
-    result.pop();
-    return result.join('/') + '/';
-  },
-  onSourceOpen: function(e) {
-    var video_buffer = this.mse.addSourceBuffer('video/mp4; codecs="avc1.4d401e"');
-    this.downloadArrayBuffer(this.current_video_representation.url, video_buffer, function(data, context) {
-      if (data) {
-        video_buffer.appendBuffer(data);
-      }
-    });
-    var audio_buffer = this.mse.addSourceBuffer('audio/mp4; codecs="mp4a.40.2"');
-    this.downloadArrayBuffer(this.current_audio_representation.url, audio_buffer, function(data, context) {
-      if (data) {
-        audio_buffer.appendBuffer(data);
-      }
-    });
-  }
-}, {});
-module.exports = MPDSourceManager;
-
-//# sourceMappingURL=<compileOutput>
-
-
-},{"./mpd-parser":6}]},{},[4,1]);
+},{"../jst":2,"./dash.js/DashParser":5,"_process":3,"playback":"playback"}]},{},[4,1]);
