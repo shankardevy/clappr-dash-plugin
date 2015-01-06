@@ -1,7 +1,15 @@
 # Clappr MPEG Dash Player Plugin
 
-WIP
+Demo
 ---
+
+Visit http://dash-player.opendrops.com/
+
+What is done?
+-------------
+* The plugin plays static live mpd profile in this format. http://178.62.104.182:1935/vod/mp4:sample.mp4/manifest.mpd
+
+* MPD Live profiles can be used for playing VOD as per the DASH specification.
 
 
 How to preview
@@ -11,7 +19,7 @@ How to preview
 
 * `npm install`
 
-* Download the CAR mp4 and mpd files from   http://dash-mse-test.appspot.com/media.html to 'sample-data' directory
+* Open index.html and change the mpd source url pointing to your server
 
 * `gulp serve`
 
