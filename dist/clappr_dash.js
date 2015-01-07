@@ -3283,6 +3283,9 @@ var $ClapprDash = ClapprDash;
   get attributes() {
     return {'data-html5-video': ''};
   },
+  get events() {
+    return {'timeupdate': 'timeUpdated'};
+  },
   retrieveDASHManifest: function(url) {
     var xhr = new XMLHttpRequest();
     xhr.addEventListener('load', this.onManifestLoad.bind(this, url));
@@ -3510,12 +3513,10 @@ var $ClapprDash = ClapprDash;
     return this.el.currentTime;
   },
   getDuration: function() {
-    this.el.duration;
+    return this.el.duration;
   },
   timeUpdated: function() {
-    if (this.getPlaybackType() !== 'live') {
-      this.trigger('playback:timeupdate', this.el.currentTime, this.el.duration, this.name);
-    }
+    this.trigger('playback:timeupdate', this.el.currentTime, this.el.duration, this.name);
   },
   progress: function() {
     if (!this.el.buffered.length)

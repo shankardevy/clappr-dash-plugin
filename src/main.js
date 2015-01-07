@@ -19,6 +19,12 @@ class ClapprDash extends Playback {
     }
   }
 
+  get events() {
+    return {
+      'timeupdate': 'timeUpdated'
+    }
+  }
+
 
   constructor(options) {
     super(options)
@@ -136,7 +142,7 @@ class ClapprDash extends Playback {
     }
 
     if (!active && msrc.readyState == 'open') {
-      msrc.endOfStream();      
+      msrc.endOfStream();
       return;
     }
   }
@@ -313,13 +319,11 @@ class ClapprDash extends Playback {
   }
 
   getDuration() {
-    this.el.duration
+    return this.el.duration
   }
 
   timeUpdated() {
-    if (this.getPlaybackType() !== 'live') {
-      this.trigger('playback:timeupdate', this.el.currentTime, this.el.duration, this.name)
-    }
+    this.trigger('playback:timeupdate', this.el.currentTime, this.el.duration, this.name)
   }
 
   progress() {
