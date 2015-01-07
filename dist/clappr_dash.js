@@ -9,7 +9,7 @@ module.exports = require("./src/main");
 (function (global){
 "use strict";
 var _ = (typeof window !== "undefined" ? window._ : typeof global !== "undefined" ? global._ : null);
-module.exports = {CSS: {}};
+module.exports = {CSS: {'clappr_dash': '[data-html5-video]{position:absolute;height:100%;width:100%;display:block}'}};
 
 //# sourceMappingURL=<compileOutput>
 

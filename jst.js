@@ -4,5 +4,7 @@ module.exports = {
 
   CSS: {
     
+      'clappr_dash': '[data-html5-video]{position:absolute;height:100%;width:100%;display:block}',
+    
   }
 };
