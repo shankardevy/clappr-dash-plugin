@@ -3284,7 +3284,10 @@ var $ClapprDash = ClapprDash;
     return {'data-html5-video': ''};
   },
   get events() {
-    return {'timeupdate': 'timeUpdated'};
+    return {
+      'timeupdate': 'timeUpdated',
+      'progress': 'progress'
+    };
   },
   retrieveDASHManifest: function(url) {
     var xhr = new XMLHttpRequest();

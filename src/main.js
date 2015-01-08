@@ -21,7 +21,8 @@ class ClapprDash extends Playback {
 
   get events() {
     return {
-      'timeupdate': 'timeUpdated'
+      'timeupdate': 'timeUpdated',
+      'progress': 'progress'      
     }
   }
 
