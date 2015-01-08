@@ -3288,6 +3288,7 @@ var $ClapprDash = ClapprDash;
       'timeupdate': 'timeUpdated',
       'progress': 'progress',
       'canplaythrough': 'bufferFull',
+      'stalled': 'stalled',
       'waiting': 'waiting'
     };
   },
@@ -3478,6 +3479,11 @@ var $ClapprDash = ClapprDash;
   ended: function() {
     this.trigger('playback:ended', this.name);
     this.trigger('playback:timeupdate', 0, this.el.duration, this.name);
+  },
+  stalled: function() {
+    if (this.el.readyState < this.el.HAVE_FUTURE_DATA) {
+      this.trigger('playback:buffering', this.name);
+    }
   },
   waiting: function() {
     if (this.el.readyState < this.el.HAVE_FUTURE_DATA) {

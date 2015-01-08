@@ -24,6 +24,7 @@ class ClapprDash extends Playback {
       'timeupdate': 'timeUpdated',
       'progress': 'progress',
       'canplaythrough': 'bufferFull',
+      'stalled': 'stalled',
       'waiting': 'waiting'
     }
   }
@@ -273,6 +274,12 @@ class ClapprDash extends Playback {
   ended() {
     this.trigger('playback:ended', this.name)
     this.trigger('playback:timeupdate', 0, this.el.duration, this.name)
+  }
+
+  stalled() {
+    if (this.el.readyState < this.el.HAVE_FUTURE_DATA) {
+      this.trigger('playback:buffering', this.name)
+    }
   }
 
   waiting() {
