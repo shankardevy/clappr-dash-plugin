@@ -3286,7 +3286,9 @@ var $ClapprDash = ClapprDash;
   get events() {
     return {
       'timeupdate': 'timeUpdated',
-      'progress': 'progress'
+      'progress': 'progress',
+      'canplaythrough': 'bufferFull',
+      'waiting': 'waiting'
     };
   },
   retrieveDASHManifest: function(url) {
@@ -3476,11 +3478,6 @@ var $ClapprDash = ClapprDash;
   ended: function() {
     this.trigger('playback:ended', this.name);
     this.trigger('playback:timeupdate', 0, this.el.duration, this.name);
-  },
-  stalled: function() {
-    if (this.getPlaybackType() === 'vod' && this.el.readyState < this.el.HAVE_FUTURE_DATA) {
-      this.trigger('playback:buffering', this.name);
-    }
   },
   waiting: function() {
     if (this.el.readyState < this.el.HAVE_FUTURE_DATA) {
