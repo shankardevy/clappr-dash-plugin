@@ -3266,6 +3266,7 @@ var ClapprDash = function ClapprDash(options) {
   this.settings.left = ["playpause", "position", "duration"];
   this.settings.right = ["fullscreen", "volume"];
   this.settings.seekEnabled = true;
+  this.downloadedTimeframes = [];
   this.parser = new DashParser;
   this.retrieveDASHManifest.bind(this)(options.src);
 };
@@ -3358,7 +3359,7 @@ var $ClapprDash = ClapprDash;
     repSrc.init = this.replaceRepresentationToken(repSrc.SegmentTemplate.initialization, repSrc);
     repSrc.segmentURLTemplate = this.replaceRepresentationToken(repSrc.SegmentTemplate.media, repSrc);
     repSrc.segments = repSrc.SegmentTemplate.SegmentTimeline.S;
-    window.testing = repSrc;
+    repSrc.timescale = repSrc.SegmentTemplate.timescale;
     return repSrc;
   },
   onProgress: function(msrc) {
@@ -3373,27 +3374,47 @@ var $ClapprDash = ClapprDash;
       if (!buf.active)
         continue;
       active = true;
-      this.fetchNextSegment(buf, this, msrc);
+      this.fetchNextSegment.bind(this)(buf, msrc);
     }
     if (!active && msrc.readyState == 'open') {
       msrc.endOfStream();
       return;
     }
   },
-  fetchNextSegment: function(buf, video, msrc) {
+  fetchNextSegment: function(buf, msrc) {
     if (buf.xhr)
       return;
+    window.buf = buf;
     var rep = buf.rep;
-    var url;
+    var url,
+        time;
     if (!buf.init_loaded) {
       url = rep.BaseURL + rep.init;
-      this.makeXHR(buf, url, true);
+      this.makeXHR.bind(this)(buf, url, 'init', true);
       return;
     }
-    url = rep.BaseURL + this.replaceTimeToken(rep.segmentURLTemplate, buf);
-    this.makeXHR(buf, url);
+    time = this.nextSegmentTime(rep, this.el);
+    url = rep.BaseURL + this.replaceTimeToken(rep.segmentURLTemplate, time);
+    this.makeXHR(buf, url, time);
   },
-  makeXHR: function(buf, url, is_init) {
+  nextSegmentTime: function(rep, video) {
+    var currentTime = video.currentTime + 5;
+    for (var i = 0,
+        last_duration = 0,
+        time = 0; i < rep.segments.length; i++) {
+      var s = rep.segments[i];
+      if (last_duration <= currentTime && last_duration + s.d / rep.timescale >= currentTime) {
+        return time;
+      }
+      last_duration += s.d / rep.timescale;
+      time += s.d;
+    }
+  },
+  makeXHR: function(buf, url, time, is_init) {
+    this.downloadedTimeframes[buf.mime] = this.downloadedTimeframes[buf.mime] || [];
+    if (_.contains(this.downloadedTimeframes[buf.mime], time))
+      return;
+    this.downloadedTimeframes[buf.mime].push(time);
     var xhr = new XMLHttpRequest();
     xhr.open("GET", url);
     xhr.responseType = 'arraybuffer';
@@ -3441,8 +3462,8 @@ var $ClapprDash = ClapprDash;
       buf.append(new Uint8Array(val));
     }
   },
-  replaceTimeToken: function(template, buf) {
-    var url = template.replace('$Time$', buf.nextSegDuration);
+  replaceTimeToken: function(template, time) {
+    var url = template.replace('$Time$', time);
     return url;
   },
   play: function() {

@@ -39,6 +39,7 @@ class ClapprDash extends Playback {
     this.settings.left = ["playpause", "position", "duration"]
     this.settings.right = ["fullscreen", "volume"]
     this.settings.seekEnabled = true
+    this.downloadedTimeframes = []
 
     // Dash
     this.parser = new DashParser;
@@ -125,7 +126,7 @@ class ClapprDash extends Playback {
     repSrc.init = this.replaceRepresentationToken(repSrc.SegmentTemplate.initialization, repSrc);
     repSrc.segmentURLTemplate = this.replaceRepresentationToken(repSrc.SegmentTemplate.media, repSrc);
     repSrc.segments = repSrc.SegmentTemplate.SegmentTimeline.S;
-    window.testing = repSrc;
+    repSrc.timescale = repSrc.SegmentTemplate.timescale
     return repSrc;
   }
 
@@ -142,7 +143,7 @@ class ClapprDash extends Playback {
       var buf = msrc.sourceBuffers[i];
       if (!buf.active) continue;
       active = true;
-      this.fetchNextSegment(buf, this, msrc);
+      this.fetchNextSegment.bind(this)(buf, msrc);
     }
 
     if (!active && msrc.readyState == 'open') {
@@ -151,21 +152,41 @@ class ClapprDash extends Playback {
     }
   }
 
-  fetchNextSegment(buf, video, msrc) {
+  fetchNextSegment(buf, msrc) {
     if (buf.xhr) return;
+    window.buf = buf;
     var rep = buf.rep;
-    var url;
+    var url, time;
 
     if (!buf.init_loaded) {
       url =  rep.BaseURL + rep.init;
-      this.makeXHR(buf, url, true);
+      this.makeXHR.bind(this)(buf, url, 'init', true);
       return;
     }
-    url = rep.BaseURL + this.replaceTimeToken(rep.segmentURLTemplate, buf);
-    this.makeXHR(buf, url);
+
+    time = this.nextSegmentTime(rep, this.el)
+    url = rep.BaseURL + this.replaceTimeToken(rep.segmentURLTemplate, time);
+    this.makeXHR(buf, url, time);
   }
 
-  makeXHR(buf, url, is_init) {
+  nextSegmentTime(rep, video) {
+    // Used some arbritary value of 5 secs. Needs to changed.
+    var currentTime = video.currentTime + 5
+    for (var i = 0, last_duration=0, time=0; i < rep.segments.length; i++) {
+      var s = rep.segments[i];
+      if (last_duration <= currentTime && last_duration + s.d/rep.timescale >= currentTime) {
+          return time;
+      }
+      last_duration += s.d/rep.timescale
+      time += s.d
+     }
+
+  }
+
+  makeXHR(buf, url, time, is_init) {
+    this.downloadedTimeframes[buf.mime] = this.downloadedTimeframes[buf.mime] || [];
+    if(_.contains(this.downloadedTimeframes[buf.mime], time)) return
+    this.downloadedTimeframes[buf.mime].push(time)
     var xhr = new XMLHttpRequest();
     xhr.open("GET", url);
     xhr.responseType = 'arraybuffer';
@@ -226,8 +247,8 @@ class ClapprDash extends Playback {
   }
 
 
-  replaceTimeToken(template, buf) {
-    var url = template.replace('$Time$', buf.nextSegDuration);
+  replaceTimeToken(template, time) {
+    var url = template.replace('$Time$', time);
     return url;
   }
 
