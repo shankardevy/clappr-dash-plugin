@@ -40,6 +40,7 @@ class ClapprDash extends Playback {
     this.settings.right = ["fullscreen", "volume"]
     this.settings.seekEnabled = true
     this.downloadedTimeframes = []
+    window.v = this.el
 
     // Dash
     this.parser = new DashParser;
@@ -160,21 +161,26 @@ class ClapprDash extends Playback {
 
     if (!buf.init_loaded) {
       url =  rep.BaseURL + rep.init;
-      this.makeXHR.bind(this)(buf, url, 'init', true);
+      this.makeXHR(buf, url, 'init', true);
       return;
     }
 
     time = this.nextSegmentTime(rep, this.el)
+    console.log('Requesting for: ' + time);
+
     url = rep.BaseURL + this.replaceTimeToken(rep.segmentURLTemplate, time);
     this.makeXHR(buf, url, time);
   }
 
   nextSegmentTime(rep, video) {
     // Used some arbritary value of 5 secs. Needs to changed.
-    var currentTime = video.currentTime + 5
+    var currentTime = video.currentTime + 2
+    console.log('Currenttime: ' + currentTime);
+
     for (var i = 0, last_duration=0, time=0; i < rep.segments.length; i++) {
       var s = rep.segments[i];
       if (last_duration <= currentTime && last_duration + s.d/rep.timescale >= currentTime) {
+          console.log('Time seeked to: ' + time);
           return time;
       }
       last_duration += s.d/rep.timescale
@@ -183,15 +189,35 @@ class ClapprDash extends Playback {
 
   }
 
+  resetSourceBuffer(buf, reason) {
+    if (buf.xhr != null) {
+      buf.xhr.abort();
+      buf.xhr = null;
+    }
+    buf.url = null;
+    buf.segIdx = null;
+    buf.last_init = null;
+    buf.reset_reason = reason || null;
+    // Shame on me for using window.
+    if (this.msrc.readyState != 'open') return;
+    buf.abort();
+  }
+
   makeXHR(buf, url, time, is_init) {
+    console.log('XHR request initiated for ' + time);
+
     this.downloadedTimeframes[buf.mime] = this.downloadedTimeframes[buf.mime] || [];
-    if(_.contains(this.downloadedTimeframes[buf.mime], time)) return
-    this.downloadedTimeframes[buf.mime].push(time)
+    if(_.contains(this.downloadedTimeframes[buf.mime], time)) {
+      console.log('XHR request skipped for ' + time);
+      window.dbuf = this.downloadedTimeframes
+    //  return
+    }
     var xhr = new XMLHttpRequest();
     xhr.open("GET", url);
     xhr.responseType = 'arraybuffer';
     xhr.addEventListener('load', this.onXHRLoad.bind(this));
     xhr.buf = buf;
+    xhr.time = time
     xhr.is_init = is_init;
     buf.xhr = xhr;
     xhr.send();
@@ -213,11 +239,11 @@ class ClapprDash extends Playback {
     //xhr.init.value = new Uint8Array(xhr.response);
 
     this.queueAppend(buf, xhr.response);
+    this.downloadedTimeframes[buf.mime].push(xhr.time)
 
     if (xhr.is_init) {
       buf.init_loaded = true;
     } else {
-      window.bufTest = buf;
       buf.nextSegDuration = (function() {
         var duration  = 0;
         for(var i=0; i<=buf.SegIdx; i++) {
@@ -326,7 +352,10 @@ class ClapprDash extends Playback {
   }
 
   seek(seekBarValue) {
+    var msrc = this.msrc
     var time = this.el.duration * (seekBarValue / 100)
+    for (var i = 0; i < msrc.sourceBuffers.length; i++)
+      this.resetSourceBuffer.bind(this)(msrc.sourceBuffers[i], 'seeking');
     this.seekSeconds(time)
   }
 
