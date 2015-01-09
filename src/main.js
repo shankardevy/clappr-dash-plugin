@@ -173,8 +173,7 @@ class ClapprDash extends Playback {
   }
 
   nextSegmentTime(rep, video) {
-    // Used some arbritary value of 5 secs. Needs to changed.
-    var currentTime = video.currentTime + 2
+    var currentTime = video.currentTime
     console.log('Currenttime: ' + currentTime);
 
     for (var i = 0, last_duration=0, time=0; i < rep.segments.length; i++) {

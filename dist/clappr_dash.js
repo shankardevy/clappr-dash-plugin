@@ -3400,7 +3400,7 @@ var $ClapprDash = ClapprDash;
     this.makeXHR(buf, url, time);
   },
   nextSegmentTime: function(rep, video) {
-    var currentTime = video.currentTime + 2;
+    var currentTime = video.currentTime;
     console.log('Currenttime: ' + currentTime);
     for (var i = 0,
         last_duration = 0,
