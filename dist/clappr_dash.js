@@ -3433,6 +3433,7 @@ var $ClapprDash = ClapprDash;
     if (_.contains(this.downloadedTimeframes[buf.mime], time)) {
       console.log('XHR request skipped for ' + time);
       window.dbuf = this.downloadedTimeframes;
+      return;
     }
     var xhr = new XMLHttpRequest();
     xhr.open("GET", url);
