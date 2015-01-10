@@ -67,7 +67,7 @@ class SourceManager {
 
       var range = this.findRangeForPlaybackTime(buf, currentTime);
       var append_time = (range && range.end) || currentTime;
-      if (append_time > time + 15) return;
+      if (append_time > time + 30) return;
       var rep = buf.rep
       for (var i = 0, last_duration=0, time=0; i < rep.segments.length; i++) {
         var s = rep.segments[i];
