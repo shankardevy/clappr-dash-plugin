@@ -3500,7 +3500,7 @@ var SourceManager = function SourceManager(videoEl, mpd) {
     _.each(this.msrc.activeBufs, function(buf, index, list) {
       var range = this.findRangeForPlaybackTime(buf, currentTime);
       var append_time = (range && range.end) || currentTime;
-      if (append_time > time + 30)
+      if (append_time > time + 5)
         return;
       var rep = buf.rep;
       for (var i = 0,
