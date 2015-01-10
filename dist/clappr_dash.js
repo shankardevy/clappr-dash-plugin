@@ -3256,10 +3256,11 @@ module.exports = X2JS;
 var Playback = require('playback');
 var JST = require('../jst');
 var DashParser = require('./dash.js/DashParser');
+var SourceManager = require('./source-manager');
 var _ = (typeof window !== "undefined" ? window._ : typeof global !== "undefined" ? global._ : null);
 var ClapprDash = function ClapprDash(options) {
   $traceurRuntime.superCall(this, $ClapprDash.prototype, "constructor", [options]);
-  var _this = this;
+  var self = this;
   this.options = options;
   this.el.loop = options.loop;
   this.settings = {default: ['seekbar']};
@@ -3267,9 +3268,22 @@ var ClapprDash = function ClapprDash(options) {
   this.settings.right = ["fullscreen", "volume"];
   this.settings.seekEnabled = true;
   this.downloadedTimeframes = [];
-  window.v = this.el;
-  this.parser = new DashParser;
-  this.retrieveDASHManifest.bind(this)(options.src);
+  this.baseURL = this.parseBaseUrl(options.src);
+  var mpdDownloader = $.ajax({
+    url: options.src,
+    beforeSend: function(xhr) {
+      xhr.overrideMimeType("text/plain; charset=UTF-8");
+    }
+  });
+  mpdDownloader.done(function(data) {
+    var mpd;
+    var parser = new DashParser();
+    mpd = parser.parse(data, self.baseURL);
+    this.source_manager = new SourceManager(self.el, mpd);
+  });
+  mpdDownloader.fail(function() {
+    alert("error downloading mpd file");
+  });
 };
 var $ClapprDash = ClapprDash;
 ($traceurRuntime.createClass)(ClapprDash, {
@@ -3294,12 +3308,6 @@ var $ClapprDash = ClapprDash;
       'waiting': 'waiting'
     };
   },
-  retrieveDASHManifest: function(url) {
-    var xhr = new XMLHttpRequest();
-    xhr.addEventListener('load', this.onManifestLoad.bind(this, url));
-    xhr.open("GET", url);
-    xhr.send();
-  },
   parseBaseUrl: function(url) {
     var base = null;
     if (url.indexOf("/") !== -1) {
@@ -3309,110 +3317,6 @@ var $ClapprDash = ClapprDash;
       base = url.substring(0, url.lastIndexOf("/") + 1);
     }
     return base;
-  },
-  onManifestLoad: function(url, evt) {
-    var mpd,
-        msrc;
-    mpd = this.parser.parse(evt.target.responseText, this.parseBaseUrl(url));
-    msrc = new MediaSource();
-    msrc.mpd = mpd;
-    msrc.addEventListener('sourceopen', this.onSourceOpen.bind(this));
-    this.mpd = mpd;
-    this.msrc = msrc;
-    this.el.src = URL.createObjectURL(msrc);
-  },
-  onSourceOpen: function(evt) {
-    var video = this.el;
-    var msrc = this.msrc;
-    var mpd = msrc.mpd;
-    if (!msrc.progressTimer) {
-      msrc.progressTimer = window.setInterval(this.onProgress.bind(this, msrc), 500);
-    }
-    msrc.duration = mpd.Period.duration || mpd.mediaPresentationDuration;
-    for (var i = 0; i < mpd.Period.AdaptationSet_asArray.length; i++) {
-      window.mpd = mpd;
-      var aset = mpd.Period.AdaptationSet[i];
-      var reps = aset.Representation_asArray.map(this.normalizeRepresentation.bind(this, mpd));
-      var mime = reps[0].mimeType || aset.mimeType;
-      var codecs = reps[0].codecs || aset.codecs;
-      var buf = msrc.addSourceBuffer(mime + '; codecs="' + codecs + '"');
-      buf.aset = aset;
-      buf.rep = reps[0];
-      buf.active = true;
-      buf.mime = mime;
-      buf.queue = [];
-      buf.SegIdx = 0;
-      buf.nextSegDuration = 0;
-      if (buf.appendBuffer) {
-        buf.addEventListener('updateend', function(e) {
-          if (buf.queue.length) {
-            buf.appendBuffer(buf.queue.shift());
-          }
-        });
-      }
-    }
-  },
-  replaceRepresentationToken: function(url, rep) {
-    return url.replace('$RepresentationID$', rep.id);
-  },
-  normalizeRepresentation: function(mpd, repSrc) {
-    repSrc.duration = mpd.mediaPresentationDuration;
-    repSrc.init = this.replaceRepresentationToken(repSrc.SegmentTemplate.initialization, repSrc);
-    repSrc.segmentURLTemplate = this.replaceRepresentationToken(repSrc.SegmentTemplate.media, repSrc);
-    repSrc.segments = repSrc.SegmentTemplate.SegmentTimeline.S;
-    repSrc.timescale = repSrc.SegmentTemplate.timescale;
-    return repSrc;
-  },
-  onProgress: function(msrc) {
-    if (msrc.readyState != 'open' && !!msrc.progressTimer) {
-      window.clearInterval(msrc.progressTimer);
-      msrc.progressTimer = null;
-      return;
-    }
-    var active = false;
-    for (var i = 0; i < msrc.sourceBuffers.length; i++) {
-      var buf = msrc.sourceBuffers[i];
-      if (!buf.active)
-        continue;
-      active = true;
-      this.fetchNextSegment.bind(this)(buf, msrc);
-    }
-    if (!active && msrc.readyState == 'open') {
-      msrc.endOfStream();
-      return;
-    }
-  },
-  fetchNextSegment: function(buf, msrc) {
-    if (buf.xhr)
-      return;
-    window.buf = buf;
-    var rep = buf.rep;
-    var url,
-        time;
-    if (!buf.init_loaded) {
-      url = rep.BaseURL + rep.init;
-      this.makeXHR(buf, url, 'init', true);
-      return;
-    }
-    time = this.nextSegmentTime(rep, this.el);
-    console.log('Requesting for: ' + time);
-    url = rep.BaseURL + this.replaceTimeToken(rep.segmentURLTemplate, time);
-    this.makeXHR(buf, url, time);
-  },
-  nextSegmentTime: function(rep, video) {
-    var currentTime = video.currentTime + 5;
-    console.log('Currenttime: ' + currentTime);
-    for (var i = 0,
-        last_duration = 0,
-        time = 0; i < rep.segments.length; i++) {
-      var s = rep.segments[i];
-      if (last_duration <= currentTime && last_duration + s.d / rep.timescale >= currentTime) {
-        console.log('Time seeked to: ' + time);
-        return time;
-      }
-      last_duration += s.d / rep.timescale;
-      time += s.d;
-    }
   },
   resetSourceBuffer: function(buf, reason) {
     if (buf.xhr != null) {
@@ -3427,72 +3331,9 @@ var $ClapprDash = ClapprDash;
       return;
     buf.abort();
   },
-  makeXHR: function(buf, url, time, is_init) {
-    console.log('XHR request initiated for ' + time);
-    this.downloadedTimeframes[buf.mime] = this.downloadedTimeframes[buf.mime] || [];
-    if (_.contains(this.downloadedTimeframes[buf.mime], time)) {
-      console.log('XHR request skipped for ' + time);
-      window.dbuf = this.downloadedTimeframes;
-      return;
-    }
-    var xhr = new XMLHttpRequest();
-    xhr.open("GET", url);
-    xhr.responseType = 'arraybuffer';
-    xhr.addEventListener('load', this.onXHRLoad.bind(this));
-    xhr.buf = buf;
-    xhr.time = time;
-    xhr.is_init = is_init;
-    buf.xhr = xhr;
-    xhr.send();
-    return xhr;
-  },
-  onXHRLoad: function(evt) {
-    var xhr = evt.target;
-    var buf = xhr.buf;
-    buf.xhr = null;
-    var vid = buf.video;
-    if (xhr.readyState != xhr.DONE)
-      return;
-    if (xhr.status >= 300) {
-      throw 'TODO: retry XHRs on failure';
-    }
-    this.queueAppend(buf, xhr.response);
-    this.downloadedTimeframes[buf.mime].push(xhr.time);
-    if (xhr.is_init) {
-      buf.init_loaded = true;
-    } else {
-      buf.nextSegDuration = (function() {
-        var duration = 0;
-        for (var i = 0; i <= buf.SegIdx; i++) {
-          duration += buf.rep.segments[i].d;
-        }
-        return duration;
-      }());
-      buf.SegIdx++;
-    }
-    if (buf.SegIdx >= buf.rep.segments.length) {
-      buf.active = false;
-    }
-  },
-  queueAppend: function(buf, val) {
-    if (buf.updating) {
-      buf.queue.push(val);
-    } else if (buf.appendBuffer) {
-      buf.appendBuffer(val);
-    } else {
-      buf.append(new Uint8Array(val));
-    }
-  },
-  replaceTimeToken: function(template, time) {
-    var url = template.replace('$Time$', time);
-    return url;
-  },
   play: function() {
     this.el.play();
     this.trigger('playback:play');
-    if (this.isHLS) {
-      this.trigger('playback:timeupdate', 1, 1, this.name);
-    }
   },
   pause: function() {
     this.el.pause();
@@ -3523,16 +3364,17 @@ var $ClapprDash = ClapprDash;
     this.trigger('playback:timeupdate', 0, this.el.duration, this.name);
   },
   stalled: function() {
-    if (this.el.readyState < this.el.HAVE_FUTURE_DATA) {
+    if (this.el.readyState < this.el.HAVE_ENOUGH_DATA) {
       this.trigger('playback:buffering', this.name);
     }
   },
   waiting: function() {
-    if (this.el.readyState < this.el.HAVE_FUTURE_DATA) {
+    if (this.el.readyState < this.el.HAVE_ENOUGH_DATA) {
       this.trigger('playback:buffering', this.name);
     }
   },
   bufferFull: function() {
+    console.log('canplaythrough');
     if (this.options.poster && this.firstBuffer) {
       this.firstBuffer = false;
       this.el.poster = this.options.poster;
@@ -3547,10 +3389,7 @@ var $ClapprDash = ClapprDash;
     this.$el.remove();
   },
   seek: function(seekBarValue) {
-    var msrc = this.msrc;
     var time = this.el.duration * (seekBarValue / 100);
-    for (var i = 0; i < msrc.sourceBuffers.length; i++)
-      this.resetSourceBuffer.bind(this)(msrc.sourceBuffers[i], 'seeking');
     this.seekSeconds(time);
   },
   seekSeconds: function(time) {
@@ -3604,4 +3443,194 @@ module.exports = window.ClapprDash = ClapprDash;
 
 
 }).call(this,require('_process'),typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{"../jst":2,"./dash.js/DashParser":5,"_process":3,"playback":"playback"}]},{},[4,1]);
+},{"../jst":2,"./dash.js/DashParser":5,"./source-manager":9,"_process":3,"playback":"playback"}],9:[function(require,module,exports){
+"use strict";
+var SourceManager = function SourceManager(videoEl, mpd) {
+  this.videoEl = videoEl;
+  this.msrc = new MediaSource();
+  this.msrc.sourceManager = this;
+  this.msrc.mpd = mpd;
+  this.msrc.addEventListener('sourceopen', this.onSourceOpen);
+  this.events();
+  this.videoEl.src = URL.createObjectURL(this.msrc);
+  this.loadBeginningSegs = function(e) {
+    var buf = e.target;
+    var rep = buf.rep;
+    var seg = rep.segments[0];
+    var time = seg.t;
+    var url = rep.BaseURL + this.replaceTimeToken(rep.segmentURLTemplate, time);
+    buf.last_duration = seg.d / rep.timescale;
+    this.requestSegementDownload(buf, url, time);
+    buf.removeEventListener('update', this.loadBeginningSegs);
+  }.bind(this);
+};
+($traceurRuntime.createClass)(SourceManager, {
+  events: function() {
+    var $__0 = this;
+    var videoEl = this.videoEl;
+    videoEl.addEventListener("timeupdate", this.isTimeFordownloadSegment.bind(this));
+    videoEl.addEventListener("seeking", this.seek.bind(this));
+    videoEl.addEventListener("ended", (function() {
+      return videoEl.removeEventListener("timeupdate", $__0.isTimeFordownloadSegment);
+    }));
+  },
+  seek: function() {
+    _.each(this.msrc.activeBufs, function(buf, index, list) {
+      buf.last_duration = this.videoEl.currentTime - 1;
+      this.resetSourceBuffer(buf, 'seeked');
+    }, this);
+    this.isTimeFordownloadSegment.bind(this)(this.videoEl.currentTime);
+  },
+  resetSourceBuffer: function(buf, reason) {
+    if (buf.xhr != null) {
+      buf.xhr.abort();
+      buf.xhr = null;
+    }
+    buf.reset_reason = reason || null;
+    if (this.msrc.readyState != 'open')
+      return;
+    buf.abort();
+  },
+  isTimeFordownloadSegment: function() {
+    console.log('RS ' + this.videoEl.readyState);
+    var currentTime = this.videoEl.currentTime;
+    console.log('time changed');
+    console.log(currentTime);
+    console.log(this);
+    _.each(this.msrc.activeBufs, function(buf, index, list) {
+      var range = this.findRangeForPlaybackTime(buf, currentTime);
+      var append_time = (range && range.end) || currentTime;
+      if (append_time > time + 15)
+        return;
+      var rep = buf.rep;
+      for (var i = 0,
+          last_duration = 0,
+          time = 0; i < rep.segments.length; i++) {
+        var s = rep.segments[i];
+        console.log(last_duration);
+        console.log('s/t: ' + s.d / rep.timescale);
+        console.log('append time: ' + append_time);
+        console.log(append_time);
+        console.log(buf);
+        if (last_duration + s.d / rep.timescale > append_time) {
+          console.log('Time seeked to: ' + append_time);
+          this.downloadForTimedData(buf, time);
+          return;
+        }
+        last_duration += s.d / rep.timescale;
+        time += s.d;
+      }
+    }, this);
+  },
+  findRangeForPlaybackTime: function(buf, time) {
+    console.log('pbt');
+    console.log(buf);
+    console.log(time);
+    var ranges = buf.buffered;
+    for (var i = 0; i < ranges.length; i++) {
+      if (ranges.start(i) <= time && ranges.end(i) >= time) {
+        return {
+          'start': ranges.start(i),
+          'end': ranges.end(i)
+        };
+      }
+    }
+  },
+  downloadForTimedData: function(buf, time) {
+    var rep = buf.rep;
+    var url = rep.BaseURL + this.replaceTimeToken(rep.segmentURLTemplate, time);
+    buf.last_duration = buf.last_duration + time / rep.timescale;
+    this.requestSegementDownload(buf, url, time);
+  },
+  updateBuffer: function(buf, value) {
+    if (buf.updating) {
+      buf.queue.push(value);
+    } else {
+      buf.appendBuffer(value);
+      if (this.videoEl.readyState < this.videoEl.HAVE_FUTURE_DATA) {
+        console.log('data less than future');
+        this.isTimeFordownloadSegment();
+      }
+    }
+  },
+  onSourceOpen: function(e) {
+    var msrc = this;
+    var sourceManager = msrc.sourceManager;
+    var mpd = msrc.mpd;
+    msrc.duration = mpd.Period.duration || mpd.mediaPresentationDuration;
+    msrc.activeBufs = [];
+    for (var i = 0; i < mpd.Period.AdaptationSet_asArray.length; i++) {
+      var aset = mpd.Period.AdaptationSet[i];
+      var reps = aset.Representation_asArray.map(sourceManager.normalizeRepresentation.bind(sourceManager, mpd));
+      var mime = reps[0].mimeType || aset.mimeType;
+      var codecs = reps[0].codecs || aset.codecs;
+      console.log(codecs);
+      var buf = msrc.addSourceBuffer(mime + '; codecs="' + codecs + '"');
+      buf.aset = aset;
+      buf.rep = reps[0];
+      buf.active = true;
+      buf.mime = mime;
+      buf.queue = [];
+      buf.downloaded = [];
+      buf.addEventListener('updateend', sourceManager.addFromQueue.bind(buf));
+      msrc.activeBufs.push(buf);
+      sourceManager.loadInit(buf);
+    }
+  },
+  normalizeRepresentation: function(mpd, repSrc) {
+    repSrc.duration = mpd.mediaPresentationDuration;
+    repSrc.init = this.replaceRepresentationToken(repSrc.SegmentTemplate.initialization, repSrc);
+    repSrc.segmentURLTemplate = this.replaceRepresentationToken(repSrc.SegmentTemplate.media, repSrc);
+    repSrc.segments = repSrc.SegmentTemplate.SegmentTimeline.S;
+    repSrc.timescale = repSrc.SegmentTemplate.timescale;
+    return repSrc;
+  },
+  replaceRepresentationToken: function(url, rep) {
+    return url.replace('$RepresentationID$', rep.id);
+  },
+  replaceTimeToken: function(template, time) {
+    var url = template.replace('$Time$', time);
+    return url;
+  },
+  addFromQueue: function() {
+    if (this.queue.length) {
+      this.appendBuffer(this.queue.shift());
+    }
+  },
+  loadInit: function(buf) {
+    var rep = buf.rep;
+    var url = rep.BaseURL + rep.init;
+    this.requestSegementDownload(buf, url, 'init');
+    buf.addEventListener('update', this.loadBeginningSegs);
+  },
+  requestSegementDownload: function(buf, url, part) {
+    if (_.contains(buf.downloaded, part))
+      return;
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", url);
+    xhr.responseType = 'arraybuffer';
+    xhr.buf = buf;
+    xhr.addEventListener('load', this.processSegmentDownload.bind(this));
+    buf.xhr = xhr;
+    buf.downloaded.push(part);
+    xhr.send();
+  },
+  processSegmentDownload: function(e) {
+    var xhr = e.target;
+    var buf = xhr.buf;
+    buf.xhr = null;
+    if (xhr.readyState != xhr.DONE)
+      return;
+    if (xhr.status >= 300) {
+      throw 'TODO: retry XHRs on failure';
+    }
+    this.updateBuffer(buf, xhr.response);
+  },
+  downloadSegment: function() {}
+}, {});
+module.exports = SourceManager;
+
+//# sourceMappingURL=<compileOutput>
+
+
+},{}]},{},[4,1]);
